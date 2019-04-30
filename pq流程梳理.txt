@@ -1,0 +1,86 @@
+.
+|
+|--_ "github.com/lib/pq"
+|  |--init()
+|     |--sql.Register("gauss", &drv{})
+|        |--sql.drivers[name] = driver
+|
+|
+|--dblib.CreateDB(dbType, dbHost, dbPort, dbUser, dbPassword, dbName, dbSslMode)
+|  |--sql.Open(dbType, dsn)
+|  |  |--sql.db = &DB{driver:sql.drivers[driverName], dsn:dataSourceName...}
+|  |  |--go db.connectionOpener()
+|  |     |--db.openNewConnection()
+|  |        |--(*pq.conn)ci = db.driver.Open(db.dsn)(sql/driver.Conn)
+|  |        |  |--func (d *drv) Open(name string) (driver.Conn, error)
+|  |        |     |--DialOpen(defaultDialer{}, name)
+|  |        |        |--o = values{"host":"localhost", "port":"5432"...}
+|  |        |        |--dial(d, o)
+|  |        |        |--cn = &pq.conn{c:tls.Client...}
+|  |        |        |--cn.sendStartupPacket(w)
+|  |        |
+|  |        |--dc = &sql.driverConn{db:db,createdAt:nowFunc(),ci:ci}
+|  |
+|  |--db.Ping()
+|  |--db.Exec(sqlText)
+|  
+|
+|--dblib.InitDB(dbType, dbHost, dbPort, dbUser, dbPassword, dbName, dbSslMode)
+|  |--orm.RegisterDriver("gauss", orm.DRGauss)
+|  |  |--orm.drivers[driverName] = DriverType
+|  |
+|  |--orm.RegisterDataBase("default", dbType(gauss), dsn, maxIdleConns, maxOpenConns)
+|     |--sql.Open(driverName, dataSource)
+|     |--addAliasWthDB(aliasName, driverName, db)
+|     |  |--al.Name = aliasName
+|     |  |--al.DriverName = driverName
+|     |  |--al.DB = db
+|     |  |--al.DbBaser = orm.dbBasers[dr]
+|     |  |--al.Driver = orm.drivers[driverName]
+|     |  |--db.Ping()
+|     |  |--dataBaseCache.add(aliasName, al)
+|     |     |--ac.cache[name] = al
+|     |
+|     |--al.DataSource = dataSource
+|     |--detectTZ(al *alias) 
+|     |  |--al.TZ = time.LoadLocation(tz)
+|     |
+|     |--SetMaxIdleConns(al.Name, maxIdleConns)
+|     |--SetMaxOpenConns(al.Name, maxOpenConns)
+|
+|
+|--main.QueryVersion()
+   |--o = orm.NewOrm()
+   |  |--o = new(orm)
+   |  |--o.Using("default")
+   |     |--al = dataBaseCache.get(name)
+   |     |  |--al = ac.cache[name]
+   |     |
+   |     |--o.alias = al
+   |     |--o.db = al.DB
+   |
+   |--o.Raw(query)
+   |  |--newRawSet(orm, query, args)
+   |  |  |--rawSet{query: query, args:args, orm:orm}
+   |  |
+   |--(o *rawSet) Exec() (sql.Result, error)
+   |  |--o.orm.db.Exec(query, args...)
+   |     |--db.ExecContext(context.Background(), query, args...)
+   |        |--db.exec(ctx, query, args, cachedOrNewConn)
+   |           |--db.execDC(ctx, dc, dc.releaseConn, query, args)
+   |              |--(*pq.conn)execer = dc.ci.(driver.Execer) 
+   |              |  |--ctxDriverExec(ctx, execer, query, dargs)
+   |              |     |--execer.Exec(query, dargs)
+   |              |        |--func (cn *conn) Exec(query string, args []driver.Value) (res driver.Result, err error)
+   |              |        |  |--cn.readExecuteResponse("Execute")
+   |              |        |
+   |              |        |--func (st *stmt) Exec(v []driver.Value) (res driver.Result, err error)
+   |              |           |--st.cn.readExecuteResponse("simple query")
+   |              |
+   |              |--resultFromStatement(ctx, dc.ci, ds, args...)
+   |                 |--ctxDriverStmtExec(ctx, ds.si, dargs)
+   |                    |--si.Exec(dargs)
+   |                       |--func (st *stmt) Exec(v []driver.Value) (res driver.Result, err error)
+   |                          |--st.cn.readExecuteResponse("simple query")
+   |
+   |--fmt.Println(result)
